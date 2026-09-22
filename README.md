@@ -4,6 +4,26 @@ A hand-written, shared-memory-tiled CUDA matrix multiplication kernel, verified
 against and benchmarked against PyTorch's built-in `torch.matmul` (cuBLAS),
 developed and tested on a SLURM-managed HPC cluster (V100 GPUs).
 
+## Triton Comparison
+
+The same tiled matmul was also implemented in OpenAI Triton (`triton_matmul.py`) and
+benchmarked head-to-head against both the hand-written CUDA kernel and cuBLAS
+(`three_way_benchmark.py`), at 2048x2048x2048:
+
+| Implementation          | Time      | vs. cuBLAS |
+|--------------------------|-----------|------------|
+| Custom CUDA (hand-tuned) | 5.188 ms  | ~4.1x slower |
+| Custom Triton            | 1.683 ms  | ~1.34x slower |
+| torch.matmul (cuBLAS)    | 1.256 ms  | baseline |
+
+Both custom kernels verified correct against `torch.matmul` via `torch.allclose`.
+
+Triton closed most of the gap to cuBLAS with substantially less manual tuning than
+the raw CUDA version required (no hand-placed `__syncthreads()`, no manual
+accumulate loop -- `tl.dot` handles the core matrix-multiply instruction selection).
+This mirrors Triton's well-known real-world value proposition: near-hand-tuned
+performance with a fraction of the development effort.
+
 ## What's here
 - `matmul_ext.cu` — the CUDA kernel (16x16 shared-memory tiling), a C++ wrapper
   taking real `torch::Tensor` inputs, and a pybind11 binding exposing it to Python.
