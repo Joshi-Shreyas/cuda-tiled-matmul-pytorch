@@ -24,6 +24,28 @@ accumulate loop -- `tl.dot` handles the core matrix-multiply instruction selecti
 This mirrors Triton's well-known real-world value proposition: near-hand-tuned
 performance with a fraction of the development effort.
 
+### Autotuning
+
+Added a `@triton.autotune`-decorated variant searching 5 block-size/warp/pipeline
+configurations. Benchmarked at 2048x2048x2048:
+
+| Implementation           | Time      | vs. cuBLAS   |
+|---------------------------|-----------|--------------|
+| Custom CUDA (hand-tuned)  | 4.999 ms  | ~4.2x slower |
+| Triton (fixed BLOCK=32)   | 1.629 ms  | ~1.37x slower|
+| Triton (autotuned)        | 1.550 ms  | ~1.31x slower|
+| torch.matmul (cuBLAS)     | 1.187 ms  | baseline     |
+
+The autotuning search itself is a real, one-time cost (~20 seconds for the first
+call at a given shape) that gets cached and skipped on every later call with the
+same dimensions. In this case it bought only a ~5% improvement over a reasonably
+chosen fixed block size -- a genuine cost/benefit tradeoff, worth paying only
+when a shape gets reused enough times (e.g. the same layer shape across a real
+training loop) to earn back the search cost.
+
+All three custom implementations verified correct against `torch.matmul` via
+`torch.allclose`.
+
 ## What's here
 - `matmul_ext.cu` — the CUDA kernel (16x16 shared-memory tiling), a C++ wrapper
   taking real `torch::Tensor` inputs, and a pybind11 binding exposing it to Python.
